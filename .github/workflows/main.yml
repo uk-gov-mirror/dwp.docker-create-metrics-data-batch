@@ -1,12 +1,11 @@
-name: Master
-
+name: 'Create Metrics Data Docker'
 on:
   push:
     branches:
       - master
 
 env:
-  IMAGE_NAME: dwpdigital/docker-create-metrics-data-batch
+  IMAGE_NAME: dwpdigital/create_metrics_data_batch
 
 jobs:
   get-publish-version:

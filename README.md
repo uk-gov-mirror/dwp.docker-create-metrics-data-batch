@@ -1,6 +1,6 @@
-# docker-create-metrics-data-batch
+# docker-metrics-data-batch
 
-## A container with required extensions and libraries for creating test data for Analytical Environment Performance Monitor
+## Description
 
 This repo contains Makefile, and Dockerfile to fit the standard pattern.
 This repo is a base to create new Docker image repos, adding the githooks submodule, making the repo ready for use.

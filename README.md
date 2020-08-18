@@ -1,6 +1,6 @@
-# dataworks-repo-template-docker
+# docker-create-metrics-data-batch
 
-## Description
+## A container with required extensions and libraries for creating test data for Analytical Environment Performance Monitor
 
 This repo contains Makefile, and Dockerfile to fit the standard pattern.
 This repo is a base to create new Docker image repos, adding the githooks submodule, making the repo ready for use.

@@ -5,8 +5,8 @@ groups:
       - management
   - name: pull-request
     jobs:
-      - dataworks-repo-template-docker-pr
+      - docker-create-metrics-data-batch-pr
   - name: mirror
     jobs:
-      - mirror-dwpdigital-dataworks-repo-template-docker-dev
-      - mirror-dwpdigital-dataworks-repo-template-docker
+      - mirror-dwpdigital-docker-create-metrics-data-batch-dev
+      - mirror-dwpdigital-docker-create-metrics-data-batch

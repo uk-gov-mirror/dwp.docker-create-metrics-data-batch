@@ -1,10 +1,10 @@
 import os
+import uuid
 from copy import deepcopy
 
 import boto3
 import pandas as pd
 from fastparquet import write
-import uuid
 
 path_to_folder = os.getenv('path_to_folder')
 dataset_s3_name = os.getenv('dataset_s3_name')
@@ -52,6 +52,9 @@ def create_parquet(output_data_file_name, chunk_id, json_data):
 def upload_file_to_s3(file_location, s3_bucket, s3_key):
     s3 = boto3.resource('s3')
     s3.meta.client.upload_file(file_location, s3_bucket, s3_key)
+    s3.meta.client.put_object_tagging(Bucket=s3_bucket, Key=s3_key,
+                                      Tagging={'TagSet': [{'Key': 'Pii', 'Value': 'false'},
+                                                          {'Key': 'collection_tag', 'Value': 'crown'}], })
 
 
 def create_hive_on_s3_data(bucket_name, s3_file_path, collection_name):
@@ -75,7 +78,7 @@ def create_hive_on_s3_data(bucket_name, s3_file_path, collection_name):
                 "Location": f"s3://{bucket_name}/{s3_file_path}",
                 "Compressed": False,
                 "NumberOfBuckets": -1,
-                "OutputFormat":"org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat",
+                "OutputFormat": "org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat",
                 "InputFormat": "org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat",
                 "SerdeInfo": {
                     "SerializationLibrary": "org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe",
@@ -99,7 +102,6 @@ def write_data_and_upload_to_s3(output_data_file_name, chunk_length, chunk_id):
         output_data = template
         output_data["_id"]["d_oid"] = int(uuid.uuid1())
         json_builder.append(deepcopy(output_data))
-    print(json_builder)
     print(f"Successfully created json data - length {x}")
 
     create_parquet(local_filename, chunk_id, json_builder)

@@ -1,8 +1,13 @@
-import boto3
 import os
+from copy import deepcopy
+
+import boto3
 import pandas as pd
 from fastparquet import write
-from copy import deepcopy
+import uuid
+
+path_to_folder = os.getenv('path_to_folder')
+dataset_s3_name = os.getenv('dataset_s3_name')
 
 small_dataset = "table1k"
 large_dataset = "table5m"
@@ -39,17 +44,9 @@ template = {
 
 def create_parquet(output_data_file_name, chunk_id, json_data):
     write(
-        '{}.parquet'.format(output_data_file_name),
+        f"{output_data_file_name}.parquet",
         pd.DataFrame({'id': chunk_id, 'val': json_data}),
     )
-
-
-def wait_for_file_in_s3(s3_bucket, s3_key):
-    waiter = boto3.client('s3').get_waiter("object_exists")
-    waiter.wait(
-        Bucket=s3_bucket, Key=s3_key, WaiterConfig={"Delay": 2, "MaxAttempts": 60}
-    )
-    return s3_key
 
 
 def upload_file_to_s3(file_location, s3_bucket, s3_key):
@@ -60,71 +57,67 @@ def upload_file_to_s3(file_location, s3_bucket, s3_key):
 def create_hive_on_s3_data(bucket_name, s3_file_path, collection_name):
     client = boto3.client("glue", region_name='eu-west-2')
 
-    DatabaseName = os.getenv('db_name')
+    database_name = os.getenv('db_name')
     try:
-        client.delete_table(DatabaseName=DatabaseName, Name=collection_name)
+        client.delete_table(DatabaseName=database_name, Name=collection_name)
     except client.exceptions.EntityNotFoundException:
         pass
 
     client.create_table(
-        DatabaseName=DatabaseName,
+        DatabaseName=database_name,
         TableInput={
             "Name": collection_name,
-            "Description": "Hive table to e2e test tagging",
+            "Description": f"Hive table for analytical-env metrics data - for collection {collection_name}",
             "StorageDescriptor": {
                 "Columns": [
-                    {"Name": "id", "Type": "string"},
-                    {"Name": "data", "Type": "string"},
+                    {"Name": "val", "Type": "string"}
                 ],
                 "Location": f"s3://{bucket_name}/{s3_file_path}",
                 "Compressed": False,
                 "NumberOfBuckets": -1,
-                "InputFormat": "org.apache.hadoop.mapred.TextInputFormat",
-                "OutputFormat": "org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat",
+                "OutputFormat":"org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat",
+                "InputFormat": "org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat",
                 "SerdeInfo": {
-                    "Name": "string",
-                    "SerializationLibrary": "org.openx.data.jsonserde.JsonSerDe",
+                    "SerializationLibrary": "org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe",
                     "Parameters": {
-                        "hbase.columns.mapping": ":key,cf:record",
-                        "serialization.format": "1",
-                    },
+                        "serialization.format": "1"
+                    }
                 },
             },
             "TableType": "EXTERNAL_TABLE",
         },
     )
 
+    print(f"Successfully created Hive on table {collection_name} in database {database_name}")
+
 
 def write_data_and_upload_to_s3(output_data_file_name, chunk_length, chunk_id):
-    local_filename = "./{}{}".format(output_data_file_name, chunk_id)
+    local_filename = f"{output_data_file_name}_{chunk_id}"
     json_builder = []
 
     for x in range(0, chunk_length):
         output_data = template
-        output_data["_id"]["d_oid"] = str(int(output_data["_id"]["d_oid"]) + 1)
+        output_data["_id"]["d_oid"] = int(uuid.uuid1())
         json_builder.append(deepcopy(output_data))
-
     print(json_builder)
+    print(f"Successfully created json data - length {x}")
 
     create_parquet(local_filename, chunk_id, json_builder)
+    print(f"Successfully created parquet file {local_filename}.parquet")
 
     upload_file_to_s3(
-                        '{}.parquet'.format(local_filename),
-                        os.getenv('dataset_s3_name'),
-                        "{}/{}/{}.parquet".format(
-                            os.getenv('path_to_folder'),
-                            output_data_file_name,
-                            local_filename
-                        )
-                      )
-    os.remove(local_filename)
+        f"{local_filename}.parquet",
+        dataset_s3_name,
+        f"{path_to_folder}/{output_data_file_name}/{local_filename}.parquet"
+    )
+    print(f"Successfully uploaded {local_filename}.parquet to s3")
+
+    os.remove(f"{local_filename}.parquet")
 
 
 def create_false_data(output_data_file_name, number_of_copies):
-
-    whole_chunks = round(number_of_copies/chunk_size)
-    last_chunk = number_of_copies - (whole_chunks*chunk_size)
-    count = 100000000000000000000000
+    whole_chunks = round(number_of_copies / chunk_size)
+    last_chunk = number_of_copies - (whole_chunks * chunk_size)
     chunk_id = 1
 
     for x in range(0, whole_chunks):
@@ -132,10 +125,9 @@ def create_false_data(output_data_file_name, number_of_copies):
         chunk_id += 1
 
     write_data_and_upload_to_s3(output_data_file_name, last_chunk, chunk_id)
-    # wait_for_file_in_s3(os.getenv('dataset_s3_name'), "{}/".format(os.getenv('path_to_folder')))
 
 
 create_false_data(small_dataset, 1000)
 create_false_data(large_dataset, 5000000)
-create_hive_on_s3_data(os.getenv('dataset_s3_name'), "{}/{}/".format(os.getenv('path_to_folder'), small_dataset), small_dataset)
-create_hive_on_s3_data(os.getenv('dataset_s3_name'), "{}/{}/".format(os.getenv('path_to_folder'), large_dataset), large_dataset)
+create_hive_on_s3_data(dataset_s3_name, f"{path_to_folder}/{small_dataset}/", small_dataset)
+create_hive_on_s3_data(dataset_s3_name, f"{path_to_folder}/{large_dataset}/", large_dataset)
